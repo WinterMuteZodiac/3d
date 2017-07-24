@@ -1,1 +1,1 @@
-# 3d-riversi(2d)
+# 3d-reversi(2d)
