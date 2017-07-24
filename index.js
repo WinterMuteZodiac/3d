@@ -25,8 +25,9 @@ var canput_list = [];
 var skip = 0;
 var luckypoint = [[0, 0], [0, N-1], [N-1, 0], [N-1, N-1]];
 var spin = 5;
+var xyhuman = [];
 var mainArray = [];
-var c = 1.0; //UCB1
+var c = 0.65; //UCB1
 
 //me = AI
 var mefirst = [
@@ -433,11 +434,11 @@ function play(x, y, sphere_array){
 
 
 
-function randkun(){
+function randkun(sphere_array){
   var xy = [];
   var k = 0;
   for(var i = 0; i < N; i++){for(var j = 0; j < N; j++){
-    if(sphere[i][j].color == 2) xy[k++] = [i, j];
+    if((sphere_array == 0 && sphere[i][j].color == 2) || (sphere_array != 0 && sphere_array[i][j] == 2)) xy[k++] = [i, j];
   }}
   return xy[getRandomInt(0, xy.length - 1)];
 }
@@ -449,7 +450,7 @@ function maxer(sphere_array){
   var flag = 0;
   for(var i = 0; i < N; i++){for(var j = 0; j < N; j++){
     if((sphere_array == 0 && sphere[i][j].color == 2) || (sphere_array != 0 && sphere_array[i][j] == 2)){
-      if(flag++ == 0 || (firstUserColor == -1 && mefirst[max[0]][max[1]] + youafter[max[0]][max[1]] < mefirst[i][j] + youafter[i][j]) || (firstUserColor == 1 && meafter[max[0]][max[1]] + youfirst[max[0]][max[1]] < meafter[i][j] + youfirst[i][j])) max = [i, j];
+      if(flag++ == 0 || (maincolor == 1 && mefirst[max[0]][max[1]] + youafter[max[0]][max[1]] < mefirst[i][j] + youafter[i][j]) || (maincolor == -1 && meafter[max[0]][max[1]] + youfirst[max[0]][max[1]] < meafter[i][j] + youfirst[i][j])) max = [i, j];
     }
   }}
   return max;
@@ -470,9 +471,19 @@ function listmax(list){
 
 function semimanabukun(epsilon, sphere_array){
   var epsilonMax = 1.0;
-  if(0 < epsilon && epsilon > Math.random()){
-    return randkun();
-  }else return maxer(sphere_array);
+  var xy = [];
+  for(var i = 0; i < luckypoint.length; i++){
+    if((sphere_array == 0 && sphere[luckypoint[i][0]][luckypoint[i][1]].color == 2) || (sphere_array != 0 && sphere_array[luckypoint[i][0]][luckypoint[i][1]] == 2)){
+      xy = [luckypoint[i][0], luckypoint[i][1]];
+      break;
+    }
+  }
+  if(xy.length != 0) return xy; 
+  else{
+    if(0 < epsilon && epsilon > Math.random()){
+      return randkun(sphere_array);
+    }else return maxer(sphere_array);
+  }
 }
 
 
@@ -483,10 +494,12 @@ function epi(totalWin, times, total, xy){
   Object.assign(saveArray, mainArray);
   var savecolor = JSON.parse(JSON.stringify(maincolor));
   var win = -3;
+  var flag = 0;
   river(xy[0], xy[1], saveArray);
   while(win == -3){
     if(canput(saveArray) == 0){
       maincolor *= -1;
+      if(flag == 0) flag++;
       if(canput(saveArray) == 0){
         var whitepoint = 0;
         var blackpoint = 0;
@@ -498,14 +511,15 @@ function epi(totalWin, times, total, xy){
           }
         }}
         if(blackpoint > whitepoint){
-          win = (firstUserColor == -1) ? 1 : 0;
+          win = (firstUserColor == -1) ? 1.5 : 0;
         }else if(blackpoint < whitepoint){
-          win = (firstUserColor == 1) ? 1 : 0;
-        }else win = 0;
+          win = (firstUserColor == 1) ? 1.5 : 0;
+        }else win = 0.5;
       }
     }else{
-      var xypoint = semimanabukun(0.5, saveArray);
+      var xypoint = semimanabukun(0.3, saveArray);
       river(xypoint[0], xypoint[1], saveArray);
+      if(flag == 0) Object.assign(xyhuman, xypoint);
     }
   }
   maincolor = JSON.parse(JSON.stringify(savecolor));
@@ -580,34 +594,54 @@ function best(){
     Object.assign(saveArray, mainArray);
     maincolor = JSON.parse(JSON.stringify(savecolor));
 
-    }else hope[i] = [-10, 1, max[0], max[1], -10, total];
+    }else hope[i] = [-1, 1, max[0], max[1], ucb(-1, 1, total++)];
   }
 
+  //function epi(totalWin, times, total, xy)
+
+  //function maxhope(hopeArray)
+
   //hope[i] = [(勝利数), (この手でのプレイ回数), (x座標), (y座標), (ucb1値)]
+
+  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  var subhope = [];
+  for(var i = 0; i < hope.length; i++) subhope[i] = 0;
 
   for(var i = 0; i < loop*3; i++){
 
     var hopebest = maxhope(hope);
 
-    mainArray = mainAR();
-    Object.assign(saveArray, mainArray);
-    savecolor = JSON.parse(JSON.stringify(maincolor));
-
     max = [hopebest[0][2], hopebest[0][3]];
-    hope[hopebest[1]] = epi(hopebest[0][0], hopebest[0][1], total++, max);
 
-    mainArray = mainAR();
-    Object.assign(saveArray, mainArray);
-    maincolor = JSON.parse(JSON.stringify(maincolor));
-
-    for(var j = 0; j < hope.length; j++){
-
-      //モンテカルロ木の伸ばした枝まで更新
-      hope[j][4] =  ucb(hope[j][0], hope[j][1], total+i+1);
-
+    if(subhope[hopebest[1]] == 1 || (subhope[hopebest[1]] == 0 && hopebest[0][1] >= 5)){
+      for(var j = 0; j < 2; j++){
+        mainArray = mainAR();
+        Object.assign(saveArray, mainArray);
+        savecolor = JSON.parse(JSON.stringify(maincolor));
+        hope[hopebest[1]] = epi(hopebest[0][0], hopebest[0][1]+j, total++, max);
+        mainArray = mainAR();
+        Object.assign(saveArray, mainArray);
+        maincolor = JSON.parse(JSON.stringify(savecolor));
+        subhope[hopebest[1]] = 1;
+      }
+    }else{
+      mainArray = mainAR();
+      Object.assign(saveArray, mainArray);
+      savecolor = JSON.parse(JSON.stringify(maincolor));
+      hope[hopebest[1]] = epi(hopebest[0][0], hopebest[0][1], total++, max);
+      mainArray = mainAR();
+      Object.assign(saveArray, mainArray);
+      maincolor = JSON.parse(JSON.stringify(savecolor));
     }
-  
+
+    for(var j = 0; j < hope.length; j++) hope[j][4] =  ucb(hope[j][0], hope[j][1], total+i+1);
+
   }
+
+  /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+  for(var i = 0; i < hope.length; i++) alert(hope[i]);
 
   hopebest = maxhope(hope);
 
@@ -632,7 +666,9 @@ function zodiac(){
 
   //十局面以降
   else{
-    if(step > 40) spin = 10;
+    if(step == 20) spin = 7;
+    else if(step == 30) spin = 9;
+    else if(step == 40) spin = 10;
     //角に置けるなら置く
     for(var i = 0; i < luckypoint.length; i++){
       if(sphere[luckypoint[i][0]][luckypoint[i][1]].color == 2){
@@ -667,7 +703,7 @@ function mainAR(){
 
 function ai(){
   var xy = [];
-  if(vsAI == "randkun") xy = randkun();
+  if(vsAI == "randkun") xy = randkun(0);
   else if(vsAI == "semimanabukun") xy = semimanabukun(0.1, 0);
   else if(vsAI == "zodiac") xy = zodiac();
   if(vsAI == "human") showtext();
